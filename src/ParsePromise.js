@@ -29,57 +29,14 @@ var isPromisesAPlusCompliant = true;
  */
 class ParsePromise {
   constructor(executor) {
-    this._resolved = false;
-    this._rejected = false;
-    this._resolvedCallbacks = [];
-    this._rejectedCallbacks = [];
+    this._promise = new Promise((resolve, reject) => {
+      this.resolve = resolve.bind(this);
+      this.reject = reject.bind(this);
+    });
 
     if (typeof executor === 'function') {
       executor(this.resolve.bind(this), this.reject.bind(this));
     }
-  }
-
-  /**
-   * Marks this promise as fulfilled, firing any callbacks waiting on it.
-
-   * @param {Object} result the result to pass to the callbacks.
-   */
-  resolve(...results) {
-    if (this._resolved || this._rejected) {
-      throw new Error(
-        'A promise was resolved even though it had already been ' +
-        (this._resolved ? 'resolved' : 'rejected') + '.'
-      );
-    }
-    this._resolved = true;
-    this._result = results;
-    for (var i = 0; i < this._resolvedCallbacks.length; i++) {
-      this._resolvedCallbacks[i].apply(this, results);
-    }
-
-    this._resolvedCallbacks = [];
-    this._rejectedCallbacks = [];
-  }
-
-  /**
-   * Marks this promise as fulfilled, firing any callbacks waiting on it.
-
-   * @param {Object} error the error to pass to the callbacks.
-   */
-  reject(error) {
-    if (this._resolved || this._rejected) {
-      throw new Error(
-        'A promise was rejected even though it had already been ' +
-        (this._resolved ? 'resolved' : 'rejected') + '.'
-      );
-    }
-    this._rejected = true;
-    this._error = error;
-    for (var i = 0; i < this._rejectedCallbacks.length; i++) {
-      this._rejectedCallbacks[i](error);
-    }
-    this._resolvedCallbacks = [];
-    this._rejectedCallbacks = [];
   }
 
   /**
@@ -103,91 +60,7 @@ class ParsePromise {
    * one is.
    */
   then(resolvedCallback, rejectedCallback) {
-    var promise = new ParsePromise();
-
-    var wrappedResolvedCallback = function(...results) {
-      if (typeof resolvedCallback === 'function') {
-        if (isPromisesAPlusCompliant) {
-          try {
-            results = [resolvedCallback.apply(this, results)];
-          } catch (e) {
-            results = [ParsePromise.error(e)];
-          }
-        } else {
-          results = [resolvedCallback.apply(this, results)];
-        }
-      }
-      if (results.length === 1 && ParsePromise.is(results[0])) {
-        results[0].then(function() {
-          promise.resolve.apply(promise, arguments);
-        }, function(error) {
-          promise.reject(error);
-        });
-      } else {
-        promise.resolve.apply(promise, results);
-      }
-    };
-
-    var wrappedRejectedCallback = function(error) {
-      var result = [];
-      if (typeof rejectedCallback === 'function') {
-        if (isPromisesAPlusCompliant) {
-          try {
-            result = [rejectedCallback(error)];
-          } catch (e) {
-            result = [ParsePromise.error(e)];
-          }
-        } else {
-          result = [rejectedCallback(error)];
-        }
-        if (result.length === 1 && ParsePromise.is(result[0])) {
-          result[0].then(function() {
-            promise.resolve.apply(promise, arguments);
-          }, function(error) {
-            promise.reject(error);
-          });
-        } else {
-          if (isPromisesAPlusCompliant) {
-            promise.resolve.apply(promise, result);
-          } else {
-            promise.reject(result[0]);
-          }
-        }
-      } else {
-        promise.reject(error);
-      }
-    };
-
-    var runLater = function(fn) {
-      fn.call();
-    };
-    if (isPromisesAPlusCompliant) {
-      if (typeof process !== 'undefined' &&
-          typeof process.nextTick === 'function') {
-        runLater = function(fn) {
-          process.nextTick(fn);
-        }
-      } else if (typeof setTimeout === 'function') {
-        runLater = function(fn) {
-          setTimeout(fn, 0);
-        }
-      }
-    }
-
-    if (this._resolved) {
-      runLater(() => {
-        wrappedResolvedCallback.apply(this, this._result);
-      });
-    } else if (this._rejected) {
-      runLater(() => {
-        wrappedRejectedCallback(this._error);
-      });
-    } else {
-      this._resolvedCallbacks.push(wrappedResolvedCallback);
-      this._rejectedCallbacks.push(wrappedRejectedCallback);
-    }
-
-    return promise;
+    this._promise.then(resolvedCallback, rejectedCallback);
   }
 
   /**
@@ -454,7 +327,7 @@ class ParsePromise {
    * will succeed, with the results being the results of all the input
    * promises. If the iterable provided is empty, the returned promise will
    * be immediately resolved.
-   * 
+   *
    * For example: <pre>
    *   var p1 = Parse.Promise.as(1);
    *   var p2 = Parse.Promise.as(2);
